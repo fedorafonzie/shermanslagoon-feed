@@ -1,66 +1,66 @@
-import requests
 import re
 import sys
+from playwright.sync_api import sync_playwright
 from feedgen.feed import FeedGenerator
 from datetime import datetime, timezone
 
 URL = 'https://www.gocomics.com/shermanslagoon'
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
-}
 
-print(f"--- START DIAGNOSE ---")
-print(f"URL: {URL}")
+def run():
+    with sync_playwright() as p:
+        # Start een onzichtbare browser
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
 
-try:
-    response = requests.get(URL, headers=HEADERS, timeout=20)
-    response.raise_for_status()
-    html = response.text
-    print(f"SUCCES: Pagina opgehaald (Lengte: {len(html)} tekens)")
-except Exception as e:
-    print(f"FOUT: Pagina onbereikbaar. {e}")
-    sys.exit(1)
+        print(f"Browser gestart. Laden van {URL}...")
+        try:
+            # Ga naar de pagina en wacht tot de netwerkverbindingen klaar zijn
+            page.goto(URL, wait_until="networkidle", timeout=60000)
+            
+            # Geef de beveiliging even de tijd om de 'challenge' te verwerken
+            page.wait_for_timeout(2000)
+            
+            # Haal de volledige broncode op NADAT de browser de JS heeft uitgevoerd
+            html = page.content()
+            print(f"Pagina geladen. Lengte broncode: {len(html)}")
+        except Exception as e:
+            print(f"FOUT: Kon pagina niet laden via browser. {e}")
+            browser.close()
+            sys.exit(1)
 
-# we zoeken naar 'assets', gevolgd door eventuele (back)slashes, en dan de 32-cijferige ID
-# Patroon: assets + een of meer slashes/backslashes + 32 hex karakters
-regex_patroon = r'assets[\\\/]+([a-f0-9]{32})'
-print(f"Zoeken met patroon: {regex_patroon}")
+        # Zoek de ID in de gerenderde code
+        match = re.search(r'assets[\\\/]+([a-f0-9]{32})', html)
 
-match = re.search(regex_patroon, html)
+        if match:
+            asset_id = match.group(1)
+            image_url = f"https://featureassets.gocomics.com/assets/{asset_id}?optimizer=image&width=1400&quality=85"
+            print(f"SUCCES: Strip gevonden! ID: {asset_id}")
+            
+            # Feed opbouwen
+            fg = FeedGenerator()
+            fg.id(URL)
+            fg.title('Shermans Lagoon')
+            fg.link(href=URL, rel='alternate')
+            fg.description('Dagelijkse strip via Playwright/Chromium')
+            
+            fe = fg.add_entry()
+            fe.id(image_url)
+            fe.title(f'Shermans Lagoon - {datetime.now().strftime("%Y-%m-%d")}')
+            fe.link(href=URL)
+            fe.description(f'<img src="{image_url}" />')
+            
+            fg.rss_file('shermanslagoon.xml', pretty=True)
+            print("RSS feed 'shermanslagoon.xml' succesvol aangemaakt.")
+        else:
+            print("FOUT: De ID kon niet worden gevonden in de gerenderde broncode.")
+            # Optioneel: bewaar een screenshot voor debuggen in GitHub Actions
+            page.screenshot(path="error_debug.png")
+            sys.exit(1)
 
-if match:
-    asset_id = match.group(1)
-    image_url = f"https://featureassets.gocomics.com/assets/{asset_id}?optimizer=image&width=1400&quality=85"
-    print(f"GEVONDEN ID: {asset_id}")
-    print(f"GEGENEREERDE URL: {image_url}")
-else:
-    print("FOUT: De ID '9a170560...' is niet gevonden in de buurt van de map 'assets'.")
-    
-    # We printen nu een relevant deel van de broncode voor jou om te inspecteren
-    # We zoeken waar de tekst 'blobName' of 'comic' staat, want daar zit de ID meestal
-    print("\n--- INSPECTIE VAN BRONCODE (Zoek hier zelf naar de ID) ---")
-    start_index = html.find('__NEXT_DATA__') # Dit is waar GoComics alle data verstopt
-    if start_index == -1:
-        start_index = 0
-    print(html[start_index:start_index + 5000]) # Print 5000 tekens vanaf het datablok
-    print("\n--- EINDE BRONCODE ---")
-    sys.exit(1)
+        browser.close()
 
-# RSS Feed opbouw (alleen als ID gevonden is)
-fg = FeedGenerator()
-fg.id(URL)
-fg.title('Shermans Lagoon')
-fg.link(href=URL, rel='alternate')
-fg.description('Dagelijkse strip')
-
-fe = fg.add_entry()
-fe.id(image_url)
-fe.title(f'Shermans Lagoon - {datetime.now().strftime("%Y-%m-%d")}')
-fe.link(href=URL)
-fe.description(f'<img src="{image_url}" />')
-
-try:
-    fg.rss_file('shermanslagoon.xml', pretty=True)
-    print("Bestand 'shermanslagoon.xml' is succesvol bijgewerkt.")
-except Exception as e:
-    print(f"Fout bij opslaan XML: {e}")
+if __name__ == "__main__":
+    run()
