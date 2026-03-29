@@ -18,19 +18,19 @@ except requests.exceptions.RequestException as e:
     print(f"FOUT: Kon GoComics pagina niet ophalen. Fout: {e}")
     exit(1)
 
-# Stap 2: Zoek met een verbeterde regular expression naar de afbeeldings-URL
+# Stap 2: Zoek naar de afbeeldings-URL in de JSON-data van de pagina
 print("Zoeken naar de afbeeldings-URL...")
 
-# GoComics gebruikt tegenwoordig vaak assets.amuniversal.com
-# We zoeken specifiek naar de meta-tag 'og:image' voor de meest betrouwbare link
-match = re.search(r'property="og:image" content="(https://assets\.amuniversal\.com/[a-f0-9]+)"', response.text)
+# We zoeken naar de URL die gevolgd wordt door de aanduiding dat dit de hoofdafbeelding is
+# De regex zoekt naar de waarde achter "url": en controleert of het de featureassets link is.
+match = re.search(r'\"url\":\"(https://featureassets\.gocomics\.com/assets/[a-f0-9]+)\"', response.text)
 
 if not match:
-    # Backup: zoek naar de URL zonder de meta-tag context
-    match = re.search(r'(https://assets\.amuniversal\.com/[a-f0-9]+)', response.text)
+    # Backup: zoek zonder de JSON-aanhalingstekens als de structuur afwijkt
+    match = re.search(r'(https://featureassets\.gocomics\.com/assets/[a-f0-9]+)', response.text)
 
 if not match:
-    print("FOUT: Kon het assets.amuniversal.com patroon niet vinden.")
+    print("FOUT: Kon de afbeelding-URL niet vinden in de broncode.")
     exit(1)
 
 image_url = match.group(1)
