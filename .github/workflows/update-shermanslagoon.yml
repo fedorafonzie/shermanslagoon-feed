@@ -10,6 +10,7 @@ permissions:
   id-token: write
 
 jobs:
+  # Job 1: Het script draaien en het XML bestand genereren
   build:
     runs-on: ubuntu-latest
     steps:
@@ -26,10 +27,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install playwright feedgen
           
-      - name: Install Playwright Browsers
+      - name: Install Playwright Chromium Browser
         run: playwright install chromium --with-deps
 
-      - name: Run Python script
+      - name: Run Python script to generate feed
         run: python generate-shermanslagoon.py
 
       - name: Upload Debug Artifacts (alleen bij fouten)
@@ -47,6 +48,7 @@ jobs:
         with:
           path: '.'
 
+  # Job 2: Het XML bestand publiceren naar GitHub Pages
   deploy:
     needs: build
     permissions:
