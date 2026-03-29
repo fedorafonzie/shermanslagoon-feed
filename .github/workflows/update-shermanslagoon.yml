@@ -2,15 +2,10 @@ name: Generate and Deploy Shermans Lagoon Feed
 
 on:
   schedule:
-    - cron: '0 8 * * *'
+    - cron: '0 9 * * *' # Iets later zetten om cache issues te voorkomen
   workflow_dispatch:
 
-permissions:
-  pages: write
-  id-token: write
-
 jobs:
-  # Job 1: Het script draaien en het XML bestand genereren
   build:
     runs-on: ubuntu-latest
     steps:
@@ -23,32 +18,16 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install playwright feedgen
-          
-      - name: Install Playwright Chromium Browser
-        run: playwright install chromium --with-deps
+        run: pip install requests feedgen
 
-      - name: Run Python script to generate feed
+      - name: Run Python script
         run: python generate-shermanslagoon.py
 
-      - name: Upload Debug Artifacts (alleen bij fouten)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-info
-          path: |
-            debug_screenshot.png
-            debug_source.html
-
       - name: Upload artifact for GitHub Pages
-        if: success()
         uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
 
-  # Job 2: Het XML bestand publiceren naar GitHub Pages
   deploy:
     needs: build
     permissions:
