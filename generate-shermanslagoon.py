@@ -3,10 +3,9 @@ import re
 from feedgen.feed import FeedGenerator
 from datetime import datetime, timezone
 
-# Configuratie
 URL = 'https://www.gocomics.com/shermanslagoon'
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
 }
 
 print(f"Script gestart: Ophalen van {URL}")
@@ -14,55 +13,45 @@ print(f"Script gestart: Ophalen van {URL}")
 try:
     response = requests.get(URL, headers=HEADERS, timeout=15)
     response.raise_for_status()
-    source_code = response.text
-    print("SUCCES: Pagina opgehaald.")
+    html = response.text
+    print(f"SUCCES: Pagina opgehaald. Status code: {response.status_code}")
 except Exception as e:
-    print(f"FOUT: Kon pagina niet ophalen. {e}")
+    print(f"FOUT: Pagina onbereikbaar. {e}")
     exit(1)
 
-# STAP 2: Zoek de unieke asset ID
-# We zoeken naar de link die eindigt op een 32-tekens lange ID (0-9 en a-f)
-# Dit patroon negeert eventuele backslashes die in de broncode kunnen staan.
-match = re.search(r'https?://featureassets\.gocomics\.com/assets/([a-f0-9]{32})', source_code)
+# We zoeken naar de unieke 32-cijferige code van de afbeelding.
+# In de broncode staat dit vaak als: "blobName":"9a170560..." of in een URL.
+# We zoeken naar de reeks van 32 hexadecimale tekens.
+id_match = re.search(r'[a-f0-9]{32}', html)
 
-if not match:
-    # Backup: Zoek naar het amuniversal domein als featureassets ontbreekt
-    match = re.search(r'https?://assets\.amuniversal\.com/([a-f0-9]{32})', source_code)
-
-if not match:
-    print("FOUT: Kon geen strip-URL vinden in de broncode.")
-    # Optioneel: print een deel van de code om te zien wat er misgaat
+if id_match:
+    asset_id = id_match.group(0)
+    image_url = f"https://featureassets.gocomics.com/assets/{asset_id}?optimizer=image&width=1400&quality=85"
+    print(f"SUCCES: Afbeelding ID gevonden: {asset_id}")
+    print(f"Volledige URL: {image_url}")
+else:
+    print("FOUT: Geen strip-ID gevonden in de broncode.")
+    # DEBUG: Laat zien wat de server naar GitHub stuurt (eerste 1000 tekens)
+    print("--- BEGIN BRONCODE FRAGMENT ---")
+    print(html[:1000]) 
+    print("--- EINDE BRONCODE FRAGMENT ---")
     exit(1)
 
-# ID uit de match halen en de schone URL opbouwen
-asset_id = match.group(1)
-image_url = f"https://featureassets.gocomics.com/assets/{asset_id}"
-# Voeg optimalisatie parameters toe voor de RSS reader
-image_url_full = f"{image_url}?optimizer=image&width=1400&quality=85"
-
-print(f"SUCCES: Strip gevonden met ID: {asset_id}")
-print(f"URL: {image_url_full}")
-
-# STAP 3: Bouw de RSS-feed
+# RSS Feed opbouwen
 fg = FeedGenerator()
 fg.id(URL)
-fg.title('Sherman\'s Lagoon Daily')
+fg.title('Shermans Lagoon')
 fg.link(href=URL, rel='alternate')
-fg.description('Dagelijkse strip van Sherman\'s Lagoon')
-fg.language('en')
+fg.description('Dagelijkse strip')
 
-current_date = datetime.now(timezone.utc)
 fe = fg.add_entry()
-fe.id(image_url_full)
-fe.title(f'Sherman\'s Lagoon - {current_date.strftime("%Y-%m-%d")}')
+fe.id(image_url)
+fe.title(f'Shermans Lagoon - {datetime.now().strftime("%Y-%m-%d")}')
 fe.link(href=URL)
-fe.pubDate(current_date)
-fe.description(f'<img src="{image_url_full}" alt="Sherman\'s Lagoon" />')
+fe.description(f'<img src="{image_url}" />')
 
 try:
     fg.rss_file('shermanslagoon.xml', pretty=True)
-    print("SUCCES: 'shermanslagoon.xml' is aangemaakt.")
+    print("Bestand 'shermanslagoon.xml' is bijgewerkt.")
 except Exception as e:
-    print(f"FOUT: Kon bestand niet wegschrijven: {e}")
-    exit(1)
-    
+    print(f"Fout bij opslaan: {e}")
