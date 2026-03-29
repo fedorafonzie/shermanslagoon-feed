@@ -1,71 +1,64 @@
 import requests
 import re
+import json
 from feedgen.feed import FeedGenerator
 from datetime import datetime, timezone
 
-print("Script gestart: Ophalen van de dagelijkse Shermans lagoon strip via Regular Expression.")
-
-# URL van de Shermans lagoon comic pagina
+# Instellingen
 SHERMANSLAGOON_URL = 'https://www.gocomics.com/shermanslagoon'
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
 
-# Stap 1: Haal de webpagina op
+print("Script gestart: Ophalen van Shermans Lagoon via gestructureerde JSON-data.")
+
 try:
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-    response = requests.get(SHERMANSLAGOON_URL, headers=headers)
+    response = requests.get(SHERMANSLAGOON_URL, headers=headers, timeout=15)
     response.raise_for_status()
-    print("SUCCES: GoComics pagina HTML opgehaald.")
+    html = response.text
 except requests.exceptions.RequestException as e:
-    print(f"FOUT: Kon GoComics pagina niet ophalen. Fout: {e}")
+    print(f"FOUT: Kon pagina niet ophalen. {e}")
     exit(1)
 
-# Stap 2: Zoek naar de afbeeldings-URL met een flexibele regex
-print("Zoeken naar de afbeeldings-URL...")
+# Stap 2: Zoek de afbeelding in de JSON-LD blokken
+image_url = None
+json_blocks = re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL)
 
-# We zoeken naar de link die begint met featureassets of assets.amuniversal
-# De regex [\\\/]* matches mogelijke escaped slashes (zoals \/)
-# De link eindigt bij een aanhalingsteken of vraagteken
-regex_patroon = r'(https:[\\\/]+(?:featureassets\.gocomics\.com|assets\.amuniversal\.com)[\\\/]assets[\\\/][a-f0-9]+)'
+for block in json_blocks:
+    try:
+        data = json.loads(block)
+        # Zoek specifiek naar het ImageObject van de strip
+        if data.get('@type') == 'ImageObject' and 'url' in data:
+            # Controleer of het een assets link is (om iconen over te slaan)
+            if "assets" in data['url']:
+                image_url = data['url']
+                break
+    except json.JSONDecodeError:
+        continue
 
-match = re.search(regex_patroon, response.text)
-
-if not match:
-    # DEBUG: Als het mislukt, print een klein deel van de broncode om te zien wat er binnenkomt
-    print("FOUT: Kon het patroon niet vinden.")
-    print("Eerste 500 tekens van broncode ter controle:")
-    print(response.text[:500])
+if not image_url:
+    print("FOUT: Geen afbeelding gevonden in de JSON-LD data.")
     exit(1)
 
-# Verwijder eventuele backslashes uit de gevonden URL
-image_url = match.group(1).replace('\\', '')
-
-# Voeg de kwaliteit-parameters toe voor de volledige strip
+# Voeg optimalisatie parameters toe voor de RSS feed
 image_url_full = f"{image_url}?optimizer=image&width=1400&quality=85"
+print(f"SUCCES: Afbeelding gevonden: {image_url_full}")
 
-print(f"SUCCES: Afbeelding URL gevonden: {image_url_full}")
-image_url = image_url_full # Overschrijf voor gebruik in de feed
-
-# Stap 3: Bouw de RSS-feed
+# Stap 3: RSS Feed genereren
 fg = FeedGenerator()
 fg.id(SHERMANSLAGOON_URL)
-fg.title('Shermans lagoon  Comic Strip')
+fg.title('Shermans Lagoon Strip')
 fg.link(href=SHERMANSLAGOON_URL, rel='alternate')
-fg.description('De dagelijkse Shermans lagoon strip.')
-fg.language('en')
-
-current_date = datetime.now(timezone.utc)
-current_date_str = current_date.strftime("%Y-%m-%d")
+fg.description('De dagelijkse Shermans Lagoon strip.')
 
 fe = fg.add_entry()
-fe.id(image_url)
-fe.title(f'Shermans lagoon - {current_date_str}')
+fe.id(image_url_full)
+fe.title(f'Shermans Lagoon - {datetime.now().strftime("%Y-%m-%d")}')
 fe.link(href=SHERMANSLAGOON_URL)
-fe.pubDate(current_date)
-fe.description(f'<img src="{image_url}" alt="Shermans lagoon Strip voor {current_date_str}" />')
+fe.description(f'<img src="{image_url_full}" alt="Shermans Lagoon Strip" />')
 
-# Stap 4: Schrijf het XML-bestand weg
 try:
     fg.rss_file('shermanslagoon.xml', pretty=True)
-    print("SUCCES: 'shermanslagoon.xml' is aangemaakt met de strip van vandaag.")
+    print("Bestand 'shermanslagoon.xml' succesvol aangemaakt.")
 except Exception as e:
-    print(f"FOUT: Kon het bestand niet wegschrijven. Foutmelding: {e}")
-    exit(1)
+    print(f"FOUT bij wegschrijven: {e}")
