@@ -18,21 +18,23 @@ except requests.exceptions.RequestException as e:
     print(f"FOUT: Kon GoComics pagina niet ophalen. Fout: {e}")
     exit(1)
 
-# Stap 2: Zoek met een regular expression naar de afbeeldings-URL
-print("Zoeken naar de afbeeldings-URL met een regular expression...")
+# Stap 2: Zoek met een verbeterde regular expression naar de afbeeldings-URL
+print("Zoeken naar de afbeeldings-URL...")
 
-# Het patroon zoekt naar de volledige URL die begint met de basis
-# en gevolgd wordt door een reeks van hexadecimale karakters (a-f, 0-9).
-match = re.search(r'(https://featureassets.gocomics.com/assets/[a-f0-9]+)', response.text)
+# GoComics gebruikt tegenwoordig vaak assets.amuniversal.com
+# We zoeken specifiek naar de meta-tag 'og:image' voor de meest betrouwbare link
+match = re.search(r'property="og:image" content="(https://assets\.amuniversal\.com/[a-f0-9]+)"', response.text)
 
 if not match:
-    print("FOUT: Kon het URL-patroon niet vinden in de broncode van de pagina.")
+    # Backup: zoek naar de URL zonder de meta-tag context
+    match = re.search(r'(https://assets\.amuniversal\.com/[a-f0-9]+)', response.text)
+
+if not match:
+    print("FOUT: Kon het assets.amuniversal.com patroon niet vinden.")
     exit(1)
 
-# match.group(1) bevat de volledige, schone URL die we hebben gevonden.
 image_url = match.group(1)
-print(f"SUCCES: Afbeelding URL gevonden via Regular Expression: {image_url}")
-# --- EINDE CORRECTIE ---
+print(f"SUCCES: Afbeelding URL gevonden: {image_url}")
     
 # Stap 3: Bouw de RSS-feed
 fg = FeedGenerator()
