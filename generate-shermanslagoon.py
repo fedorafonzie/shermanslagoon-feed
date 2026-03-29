@@ -18,24 +18,32 @@ except requests.exceptions.RequestException as e:
     print(f"FOUT: Kon GoComics pagina niet ophalen. Fout: {e}")
     exit(1)
 
-# Stap 2: Zoek naar de afbeeldings-URL in de JSON-data van de pagina
+# Stap 2: Zoek naar de afbeeldings-URL met een flexibele regex
 print("Zoeken naar de afbeeldings-URL...")
 
-# We zoeken naar de URL die gevolgd wordt door de aanduiding dat dit de hoofdafbeelding is
-# De regex zoekt naar de waarde achter "url": en controleert of het de featureassets link is.
-match = re.search(r'\"url\":\"(https://featureassets\.gocomics\.com/assets/[a-f0-9]+)\"', response.text)
+# We zoeken naar de link die begint met featureassets of assets.amuniversal
+# De regex [\\\/]* matches mogelijke escaped slashes (zoals \/)
+# De link eindigt bij een aanhalingsteken of vraagteken
+regex_patroon = r'(https:[\\\/]+(?:featureassets\.gocomics\.com|assets\.amuniversal\.com)[\\\/]assets[\\\/][a-f0-9]+)'
+
+match = re.search(regex_patroon, response.text)
 
 if not match:
-    # Backup: zoek zonder de JSON-aanhalingstekens als de structuur afwijkt
-    match = re.search(r'(https://featureassets\.gocomics\.com/assets/[a-f0-9]+)', response.text)
-
-if not match:
-    print("FOUT: Kon de afbeelding-URL niet vinden in de broncode.")
+    # DEBUG: Als het mislukt, print een klein deel van de broncode om te zien wat er binnenkomt
+    print("FOUT: Kon het patroon niet vinden.")
+    print("Eerste 500 tekens van broncode ter controle:")
+    print(response.text[:500])
     exit(1)
 
-image_url = match.group(1)
-print(f"SUCCES: Afbeelding URL gevonden: {image_url}")
-    
+# Verwijder eventuele backslashes uit de gevonden URL
+image_url = match.group(1).replace('\\', '')
+
+# Voeg de kwaliteit-parameters toe voor de volledige strip
+image_url_full = f"{image_url}?optimizer=image&width=1400&quality=85"
+
+print(f"SUCCES: Afbeelding URL gevonden: {image_url_full}")
+image_url = image_url_full # Overschrijf voor gebruik in de feed
+
 # Stap 3: Bouw de RSS-feed
 fg = FeedGenerator()
 fg.id(SHERMANSLAGOON_URL)
