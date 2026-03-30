@@ -1,5 +1,8 @@
 name: Generate and Deploy Shermans Lagoon Feed
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  
 on:
   schedule:
     - cron: '0 8 * * *' # Iets later zetten om cache issues te voorkomen
