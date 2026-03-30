@@ -2,7 +2,7 @@ name: Generate and Deploy Shermans Lagoon Feed
 
 on:
   schedule:
-    - cron: '0 9 * * *' # Iets later zetten om cache issues te voorkomen
+    - cron: '0 8 * * *' # Iets later zetten om cache issues te voorkomen
   workflow_dispatch:
 
 jobs:
